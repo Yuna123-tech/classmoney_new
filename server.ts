@@ -96,7 +96,7 @@ async function startServer() {
       const sheets = getSheets(tokens);
       const response = await sheets.spreadsheets.values.get({
         spreadsheetId: SHEET_ID,
-        range: "Students!A2:F50", // Name, Balance, AvatarURL, Certificates, BaseAllowance, Password
+        range: "Students!A2:G50", // Name, Balance, AvatarURL, Certificates, BaseAllowance, Password, PetData
       }).catch(() => null);
 
       if (response && response.data.values) {
@@ -106,7 +106,8 @@ async function startServer() {
           avatarUrl: row[2] || `https://api.dicebear.com/7.x/avataaars/svg?seed=${row[0]}`,
           certificates: row[3] ? row[3].split(",") : [],
           allowance: parseInt(row[4] || "0"),
-          password: row[5] || "1234" // Default password if missing
+          password: row[5] || "1234",
+          petData: row[6] ? JSON.parse(row[6]) : { stage: "egg", level: 1, exp: 0, hunger: 50, thirst: 50, lastInteraction: Date.now() }
         }));
         return res.json(studentList);
       }
@@ -128,7 +129,7 @@ async function startServer() {
       // 1. Get current students to update balances
       const response = await sheets.spreadsheets.values.get({
         spreadsheetId: SHEET_ID,
-        range: "Students!A2:F50", // Include password column to avoid losing it
+        range: "Students!A2:G50", // Include PetData column
       });
 
       const rows = response.data.values;
@@ -147,7 +148,7 @@ async function startServer() {
       // 3. Write back to Students sheet
       await sheets.spreadsheets.values.update({
         spreadsheetId: SHEET_ID,
-        range: "Students!A2:F50",
+        range: "Students!A2:G50",
         valueInputOption: "RAW",
         requestBody: { values: updatedRows },
       });
@@ -253,6 +254,44 @@ async function startServer() {
     io.emit("stocks:update", stocks);
     io.emit("news:update", newsItem.text);
   }, 30000);
+
+  app.post("/api/pet/update", async (req, res) => {
+    const { studentName, petData, balanceChange } = req.body;
+    const tokens = req.cookies.google_tokens ? JSON.parse(req.cookies.google_tokens) : null;
+    if (!tokens || !SHEET_ID) return res.status(401).json({ error: "Unauthorized" });
+
+    try {
+      const sheets = getSheets(tokens);
+      const response = await sheets.spreadsheets.values.get({
+        spreadsheetId: SHEET_ID,
+        range: "Students!A2:G50",
+      });
+
+      const rows = response.data.values;
+      if (!rows) return res.status(404).json({ error: "No students found" });
+
+      const rowIndex = rows.findIndex(row => row[0] === studentName);
+      if (rowIndex === -1) return res.status(404).json({ error: "Student not found" });
+
+      const row = rows[rowIndex];
+      if (balanceChange) {
+        row[1] = (parseInt(row[1] || "0") + balanceChange).toString();
+      }
+      row[6] = JSON.stringify(petData);
+
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SHEET_ID,
+        range: `Students!A${rowIndex + 2}:G${rowIndex + 2}`,
+        valueInputOption: "RAW",
+        requestBody: { values: [row] },
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Failed to update pet data" });
+    }
+  });
 
   // --- Vite Middleware ---
   if (process.env.NODE_ENV !== "production") {

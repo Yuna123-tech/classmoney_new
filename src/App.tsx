@@ -14,13 +14,30 @@ import {
   Award,
   Users,
   ShieldCheck,
-  Bell
+  Bell,
+  Egg,
+  Milk,
+  Droplets,
+  Brain,
+  Zap
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import socket from "./lib/socket";
+import { GoogleGenAI, Type } from "@google/genai";
+
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 type Role = "student" | "teacher";
-type Tab = "dashboard" | "stocks" | "auction" | "admin" | "my-page";
+type Tab = "dashboard" | "stocks" | "auction" | "admin" | "my-page" | "pet";
+
+interface PetData {
+  stage: "egg" | "baby" | "adult";
+  level: number;
+  exp: number;
+  hunger: number;
+  thirst: number;
+  lastInteraction: number;
+}
 
 interface Student {
   name: string;
@@ -29,6 +46,7 @@ interface Student {
   certificates: string[];
   allowance: number;
   password?: string;
+  petData: PetData;
 }
 
 interface Stock {
@@ -103,6 +121,12 @@ function StudentCard({ student, currencyName }: { student: Student; currencyName
             Weekly Bonus: +{student.allowance} {currencyName}
           </div>
         )}
+
+        <div className="mt-3 flex items-center gap-1.5 px-3 py-1 bg-blue-50/50 rounded-full border border-blue-100">
+          <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Pet</span>
+          <span className="text-xs font-bold text-blue-600">Lv.{student.petData?.level || 1}</span>
+          <span className="text-xs">{student.petData?.stage === "egg" ? "🥚" : student.petData?.stage === "baby" ? "🐣" : "🐥"}</span>
+        </div>
       </div>
     </motion.div>
   );
@@ -120,11 +144,19 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [notifications, setNotifications] = useState<string[]>([]);
   const [currentNews, setCurrentNews] = useState("오늘의 경제 소식: 시장이 평온합니다. ☕");
+  const [showMathModal, setShowMathModal] = useState(false);
+  const [mathProblem, setMathProblem] = useState<{ question: string; answer: number; options: number[] } | null>(null);
+  const [isSolving, setIsSolving] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginName, setLoginName] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
 
+  const [serverConnected, setServerConnected] = useState(false);
+
   useEffect(() => {
+    socket.on("connect", () => setServerConnected(true));
+    socket.on("disconnect", () => setServerConnected(false));
+    
     fetchSettings();
     fetchStudents(); // Initial fetch for student names
     
@@ -183,9 +215,11 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setStudents(data);
-        // For demo, if student role, pick the first one as "me"
-        if (role === "student" && data.length > 0) {
-          setMyProfile(data[0]);
+        
+        // If already logged in as a student, update myProfile with fresh data from the list
+        if (isLoggedIn && role === "student" && myProfile) {
+          const updatedMe = data.find((s: Student) => s.name === myProfile.name);
+          if (updatedMe) setMyProfile(updatedMe);
         }
       }
     } catch (err) {
@@ -196,14 +230,111 @@ export default function App() {
   };
 
   const handleLogin = async () => {
-    const res = await fetch("/api/auth/url");
-    const { url } = await res.json();
-    window.open(url, "google_auth", "width=600,height=700");
+    try {
+      const res = await fetch("/api/auth/url");
+      if (!res.ok) throw new Error("Failed to fetch auth URL");
+      const { url } = await res.json();
+      window.open(url, "google_auth", "width=600,height=700");
+    } catch (err) {
+      console.error(err);
+      alert("서버와 연결할 수 없습니다. 백엔드 서버가 실행 중인지 확인해 주세요.");
+    }
   };
 
   const handleBid = (amount: number) => {
     if (myProfile && amount > myProfile.balance) return alert("잔액이 부족합니다!");
     socket.emit("auction:bid", { amount, bidder: myProfile?.name || "학생" });
+  };
+
+  const handlePetAction = async (action: "feed" | "water" | "solve") => {
+    if (!myProfile) return;
+    
+    const newPetData = { ...myProfile.petData };
+    let balanceChange = 0;
+    let expGain = 0;
+
+    if (action === "feed") {
+      if (newPetData.hunger >= 100) return alert("이미 배가 부릅니다!");
+      newPetData.hunger = Math.min(100, newPetData.hunger + 20);
+      expGain = 5;
+      balanceChange = 1; // Small reward
+    } else if (action === "water") {
+      if (newPetData.thirst >= 100) return alert("목이 마르지 않아요!");
+      newPetData.thirst = Math.min(100, newPetData.thirst + 20);
+      expGain = 5;
+      balanceChange = 1;
+    } else if (action === "solve") {
+      expGain = 20;
+      balanceChange = 5; // Math reward
+    }
+
+    newPetData.exp += expGain;
+    
+    // Level up logic
+    if (newPetData.exp >= newPetData.level * 100) {
+      newPetData.exp -= newPetData.level * 100;
+      newPetData.level += 1;
+      if (newPetData.stage === "egg" && newPetData.level >= 2) newPetData.stage = "baby";
+      if (newPetData.stage === "baby" && newPetData.level >= 5) newPetData.stage = "adult";
+      alert(`축하합니다! 레벨 ${newPetData.level}이 되었습니다!`);
+    }
+
+    newPetData.lastInteraction = Date.now();
+
+    try {
+      const res = await fetch("/api/pet/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentName: myProfile.name, petData: newPetData, balanceChange })
+      });
+      if (res.ok) {
+        setMyProfile({ ...myProfile, petData: newPetData, balance: myProfile.balance + balanceChange });
+        setNotifications(prev => [`${action === "solve" ? "수학 문제 해결!" : "펫 돌보기 완료!"} +${balanceChange} ${currencyName}`, ...prev].slice(0, 5));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const generateMathProblem = async () => {
+    setIsSolving(true);
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: "초등학교 4학년 수준의 수학 문제를 하나 내줘. 사칙연산(덧셈, 뺄셈, 곱셈, 나눗셈) 중 하나를 사용해. JSON 형식으로 답해줘: { \"question\": \"문제 내용\", \"answer\": 정답숫자, \"options\": [정답포함 4개의 숫자] }",
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              question: { type: Type.STRING },
+              answer: { type: Type.NUMBER },
+              options: { type: Type.ARRAY, items: { type: Type.NUMBER } }
+            },
+            required: ["question", "answer", "options"]
+          }
+        }
+      });
+      
+      const data = JSON.parse(response.text);
+      setMathProblem(data);
+      setShowMathModal(true);
+    } catch (err) {
+      console.error(err);
+      alert("문제를 생성하는 중 오류가 발생했습니다.");
+    } finally {
+      setIsSolving(false);
+    }
+  };
+
+  const handleMathAnswer = (selected: number) => {
+    if (mathProblem && selected === mathProblem.answer) {
+      alert("정답입니다! 펫이 기뻐합니다.");
+      handlePetAction("solve");
+      setShowMathModal(false);
+    } else {
+      alert("틀렸습니다. 다시 도전해 보세요!");
+    }
   };
 
   const handleBulkReward = async (amount: number, reason: string) => {
@@ -230,6 +361,16 @@ export default function App() {
     <div className="min-h-screen bg-[#F0F9FF] text-[#1E293B] font-sans selection:bg-[#3B82F6] selection:text-white">
       {/* Notifications */}
       <div className="fixed bottom-6 right-6 z-[100] flex flex-col gap-2">
+        {!serverConnected && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-red-500 text-white p-4 rounded-2xl shadow-xl flex items-center gap-3"
+          >
+            <div className="w-2 h-2 bg-white rounded-full animate-ping" />
+            <p className="text-xs font-bold">서버 연결 끊김 (백엔드 확인 필요)</p>
+          </motion.div>
+        )}
         <AnimatePresence>
           {notifications.map((note, i) => (
             <motion.div
@@ -291,6 +432,52 @@ export default function App() {
                   입장하기
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Math Modal */}
+      <AnimatePresence>
+        {showMathModal && mathProblem && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-blue-900/60 backdrop-blur-md"
+              onClick={() => setShowMathModal(false)}
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="bg-white rounded-[3rem] p-12 shadow-2xl relative z-10 w-full max-w-lg border-8 border-blue-100 text-center"
+            >
+              <div className="w-20 h-20 bg-blue-500 rounded-3xl flex items-center justify-center text-white mx-auto mb-8 shadow-xl shadow-blue-200">
+                <Brain size={40} />
+              </div>
+              <h2 className="text-2xl font-black mb-4 text-blue-900 tracking-tighter">펫의 수학 퀴즈!</h2>
+              <p className="text-blue-400 font-bold mb-10">정답을 맞히면 펫이 성장하고 보상을 받아요.</p>
+              
+              <div className="bg-blue-50 p-10 rounded-[2.5rem] mb-10 border-2 border-blue-100">
+                <p className="text-4xl font-black text-blue-600 tracking-tight">{mathProblem.question}</p>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                {mathProblem.options.map((opt, i) => (
+                  <button
+                    key={i}
+                    onClick={() => handleMathAnswer(opt)}
+                    className="bg-white border-4 border-blue-50 py-6 rounded-3xl font-black text-2xl text-blue-900 hover:border-blue-400 hover:bg-blue-50 transition-all active:scale-95 shadow-lg shadow-blue-50"
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+              
+              <button 
+                onClick={() => setShowMathModal(false)}
+                className="mt-10 text-blue-300 font-black text-sm hover:text-blue-500 transition-colors"
+              >
+                나중에 풀기
+              </button>
             </motion.div>
           </div>
         )}
@@ -363,8 +550,9 @@ export default function App() {
             { id: "dashboard", label: "현황판", icon: Users },
             { id: "stocks", label: "주식 시장", icon: TrendingUp },
             { id: "auction", label: "라이브 경매", icon: Gavel },
-            { id: "my-page", label: "내 정보", icon: User, hide: role === "teacher" },
-            { id: "admin", label: "관리 도구", icon: Settings, hide: role === "student" },
+            { id: "pet", label: "펫 키우기", icon: Egg, hide: role !== "student" },
+            { id: "my-page", label: "내 정보", icon: User, hide: role !== "student" },
+            { id: "admin", label: "관리 도구", icon: Settings, hide: role !== "teacher" },
           ].filter(t => !t.hide).map((tab) => (
             <button
               key={tab.id}
@@ -422,6 +610,128 @@ export default function App() {
                     <p className="text-xl font-bold text-blue-200">학생 데이터를 불러오는 중입니다...</p>
                   </div>
                 )}
+              </div>
+            </motion.div>
+          )}
+
+          {activeTab === "pet" && myProfile && (
+            <motion.div
+              key="pet"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="max-w-4xl mx-auto"
+            >
+              <div className="bg-white p-12 rounded-[4rem] shadow-2xl border border-blue-50 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-blue-50 rounded-full -mr-32 -mt-32 blur-3xl opacity-50" />
+                <div className="absolute bottom-0 left-0 w-64 h-64 bg-blue-100 rounded-full -ml-32 -mb-32 blur-3xl opacity-30" />
+                
+                <div className="relative z-10 flex flex-col items-center text-center">
+                  <div className="relative mb-12">
+                    <motion.div
+                      animate={{ 
+                        y: [0, -15, 0],
+                        rotate: [0, -2, 2, 0]
+                      }}
+                      transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
+                      className="w-64 h-64 bg-gradient-to-b from-blue-50 to-white rounded-full flex items-center justify-center text-[10rem] shadow-2xl shadow-blue-100 border-8 border-white"
+                    >
+                      {myProfile.petData.stage === "egg" ? "🥚" : myProfile.petData.stage === "baby" ? "🐣" : "🐥"}
+                    </motion.div>
+                    <motion.div 
+                      initial={{ scale: 0 }} animate={{ scale: 1 }}
+                      className="absolute -bottom-6 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-8 py-3 rounded-full font-black text-xl shadow-xl shadow-blue-200 border-4 border-white"
+                    >
+                      Lv. {myProfile.petData.level}
+                    </motion.div>
+                  </div>
+                  
+                  <h3 className="text-4xl font-black mb-4 text-blue-900 tracking-tighter">
+                    {myProfile.petData.stage === "egg" ? "부화 대기 중인 알" : myProfile.petData.stage === "baby" ? "아기 펫" : "성장한 펫"}
+                  </h3>
+                  <div className="flex items-center gap-2 mb-12">
+                    <div className="h-2 w-48 bg-blue-50 rounded-full overflow-hidden">
+                      <motion.div 
+                        initial={{ width: 0 }} 
+                        animate={{ width: `${(myProfile.petData.exp / (myProfile.petData.level * 100)) * 100}%` }} 
+                        className="h-full bg-blue-500" 
+                      />
+                    </div>
+                    <span className="text-[10px] font-black text-blue-300 uppercase tracking-widest">EXP</span>
+                  </div>
+                  
+                  <div className="w-full max-w-2xl grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
+                    <div className="bg-blue-50/50 p-8 rounded-[2.5rem] border border-blue-100">
+                      <div className="flex justify-between items-center mb-4">
+                        <div className="flex items-center gap-2">
+                          <Milk size={18} className="text-orange-500" />
+                          <span className="text-sm font-black text-blue-900 uppercase tracking-widest">Hunger</span>
+                        </div>
+                        <span className="text-lg font-black text-blue-600">{myProfile.petData.hunger}%</span>
+                      </div>
+                      <div className="h-4 bg-white rounded-full overflow-hidden border-2 border-blue-100">
+                        <motion.div 
+                          initial={{ width: 0 }} 
+                          animate={{ width: `${myProfile.petData.hunger}%` }} 
+                          className="h-full bg-gradient-to-r from-orange-400 to-orange-500" 
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="bg-blue-50/50 p-8 rounded-[2.5rem] border border-blue-100">
+                      <div className="flex justify-between items-center mb-4">
+                        <div className="flex items-center gap-2">
+                          <Droplets size={18} className="text-blue-500" />
+                          <span className="text-sm font-black text-blue-900 uppercase tracking-widest">Thirst</span>
+                        </div>
+                        <span className="text-lg font-black text-blue-600">{myProfile.petData.thirst}%</span>
+                      </div>
+                      <div className="h-4 bg-white rounded-full overflow-hidden border-2 border-blue-100">
+                        <motion.div 
+                          initial={{ width: 0 }} 
+                          animate={{ width: `${myProfile.petData.thirst}%` }} 
+                          className="h-full bg-gradient-to-r from-blue-400 to-blue-500" 
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-wrap justify-center gap-6 w-full max-w-2xl">
+                    <button 
+                      onClick={() => handlePetAction("feed")} 
+                      className="flex-1 min-w-[160px] bg-white border-4 border-blue-50 p-8 rounded-[2.5rem] flex flex-col items-center gap-4 hover:border-blue-200 hover:bg-blue-50 transition-all active:scale-95 group shadow-xl shadow-blue-50"
+                    >
+                      <div className="w-16 h-16 bg-orange-50 rounded-2xl flex items-center justify-center text-orange-500 group-hover:scale-110 transition-transform">
+                        <Milk size={32} />
+                      </div>
+                      <span className="font-black text-blue-900 text-lg">먹이주기</span>
+                      <span className="text-[10px] font-bold text-blue-300">+5 EXP / +1 {currencyName}</span>
+                    </button>
+                    
+                    <button 
+                      onClick={() => handlePetAction("water")} 
+                      className="flex-1 min-w-[160px] bg-white border-4 border-blue-50 p-8 rounded-[2.5rem] flex flex-col items-center gap-4 hover:border-blue-200 hover:bg-blue-50 transition-all active:scale-95 group shadow-xl shadow-blue-50"
+                    >
+                      <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-500 group-hover:scale-110 transition-transform">
+                        <Droplets size={32} />
+                      </div>
+                      <span className="font-black text-blue-900 text-lg">물주기</span>
+                      <span className="text-[10px] font-bold text-blue-300">+5 EXP / +1 {currencyName}</span>
+                    </button>
+                    
+                    <button 
+                      onClick={generateMathProblem} 
+                      disabled={isSolving}
+                      className="flex-1 min-w-[160px] bg-blue-600 p-8 rounded-[2.5rem] flex flex-col items-center gap-4 hover:bg-blue-700 transition-all active:scale-95 group shadow-2xl shadow-blue-200 disabled:opacity-50"
+                    >
+                      <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center text-white group-hover:scale-110 transition-transform">
+                        {isSolving ? <RefreshCw size={32} className="animate-spin" /> : <Brain size={32} />}
+                      </div>
+                      <span className="font-black text-white text-lg">수학 퀴즈</span>
+                      <span className="text-[10px] font-bold text-blue-100">+20 EXP / +5 {currencyName}</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             </motion.div>
           )}
