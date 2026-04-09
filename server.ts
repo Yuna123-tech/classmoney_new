@@ -94,10 +94,9 @@ async function startServer() {
 
     try {
       const sheets = getSheets(tokens);
-      // We'll try to get data from a 'Students' sheet if it exists, otherwise fallback to main sheet
       const response = await sheets.spreadsheets.values.get({
         spreadsheetId: SHEET_ID,
-        range: "Students!A2:E50", // Name, Balance, AvatarURL, Certificates, BaseAllowance
+        range: "Students!A2:F50", // Name, Balance, AvatarURL, Certificates, BaseAllowance, Password
       }).catch(() => null);
 
       if (response && response.data.values) {
@@ -106,27 +105,12 @@ async function startServer() {
           balance: parseInt(row[1] || "0"),
           avatarUrl: row[2] || `https://api.dicebear.com/7.x/avataaars/svg?seed=${row[0]}`,
           certificates: row[3] ? row[3].split(",") : [],
-          allowance: parseInt(row[4] || "0")
+          allowance: parseInt(row[4] || "0"),
+          password: row[5] || "1234" // Default password if missing
         }));
         return res.json(studentList);
       }
-
-      // Fallback to the original logic if 'Students' sheet doesn't exist
-      const fallbackResponse = await sheets.spreadsheets.values.get({
-        spreadsheetId: SHEET_ID,
-        range: "D2:Z4",
-      });
-      const values = fallbackResponse.data.values;
-      if (!values || values.length < 3) return res.json([]);
-      const names = values[0];
-      const balances = values[2];
-      res.json(names.map((name, i) => ({
-        name,
-        balance: parseInt(balances[i] || "0"),
-        avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${name}`,
-        certificates: [],
-        allowance: 0
-      })).filter(s => s.name));
+      res.json([]);
     } catch (error) {
       console.error(error);
       res.status(500).json({ error: "Failed to fetch students" });
@@ -144,7 +128,7 @@ async function startServer() {
       // 1. Get current students to update balances
       const response = await sheets.spreadsheets.values.get({
         spreadsheetId: SHEET_ID,
-        range: "Students!A2:E50",
+        range: "Students!A2:F50", // Include password column to avoid losing it
       });
 
       const rows = response.data.values;
@@ -163,7 +147,7 @@ async function startServer() {
       // 3. Write back to Students sheet
       await sheets.spreadsheets.values.update({
         spreadsheetId: SHEET_ID,
-        range: "Students!A2:E50",
+        range: "Students!A2:F50",
         valueInputOption: "RAW",
         requestBody: { values: updatedRows },
       });
@@ -215,8 +199,14 @@ async function startServer() {
     { text: "닌텐도의 신작 게임이 전 세계적으로 인기입니다! 🍄", target: "NTDOY", impact: 0.04 },
     { text: "엔비디아의 AI 칩 수요가 폭발적입니다! 🤖", target: "NVDA", impact: 0.07 },
     { text: "전기 요금 인상 소식에 전력주가 들썩입니다! 💡", target: "KEPCO", impact: 0.03 },
-    { text: "전반적인 경기 침체 우려로 시장이 하락세입니다. 📉", target: "ALL", impact: -0.03 },
-    { text: "기술주들의 실적 발표가 예상보다 좋게 나왔습니다! 📈", target: "ALL", impact: 0.02 },
+    { text: "구글의 새로운 AI 모델이 발표되었습니다! 🔍", target: "GOOGL", impact: 0.04 },
+    { text: "마이크로소프트의 클라우드 매출이 급증했습니다! ☁️", target: "MSFT", impact: 0.05 },
+    { text: "닌텐도의 새로운 게임기가 유출되었습니다! 🎮", target: "NTDOY", impact: 0.06 },
+    { text: "로블록스 사용자가 역대 최고치를 기록했습니다! 🧱", target: "RBLX", impact: 0.04 },
+    { text: "디즈니랜드의 새로운 테마파크가 인기를 끌고 있습니다! 🏰", target: "DIS", impact: 0.03 },
+    { text: "테슬라의 자율주행 기술이 큰 진전을 보였습니다! 🚗", target: "TSLA", impact: 0.05 },
+    { text: "전 세계 경제가 활기를 띠고 있습니다! 📈", target: "ALL", impact: 0.02 },
+    { text: "금리가 인하될 가능성이 높아지며 시장이 환호합니다! 🎊", target: "ALL", impact: 0.03 },
   ];
 
   io.on("connection", (socket) => {
