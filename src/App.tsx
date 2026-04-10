@@ -321,7 +321,7 @@ export default function App() {
       setShowMathModal(true);
     } catch (err) {
       console.error(err);
-      alert("문제를 생성하는 중 오류가 발생했습니다.");
+      alert("문제를 생성하는 중 오류가 발생했습니다. API 키 설정을 확인해 주세요.");
     } finally {
       setIsSolving(false);
     }
@@ -550,7 +550,7 @@ export default function App() {
             { id: "dashboard", label: "현황판", icon: Users },
             { id: "stocks", label: "주식 시장", icon: TrendingUp },
             { id: "auction", label: "라이브 경매", icon: Gavel },
-            { id: "pet", label: "펫 키우기", icon: Egg, hide: role !== "student" },
+            { id: "pet", label: "펫 키우기", icon: Egg },
             { id: "my-page", label: "내 정보", icon: User, hide: role !== "student" },
             { id: "admin", label: "관리 도구", icon: Settings, hide: role !== "teacher" },
           ].filter(t => !t.hide).map((tab) => (
@@ -614,7 +614,7 @@ export default function App() {
             </motion.div>
           )}
 
-          {activeTab === "pet" && myProfile && (
+          {activeTab === "pet" && (
             <motion.div
               key="pet"
               initial={{ opacity: 0, scale: 0.95 }}
@@ -622,117 +622,154 @@ export default function App() {
               exit={{ opacity: 0, scale: 0.95 }}
               className="max-w-4xl mx-auto"
             >
-              <div className="bg-white p-12 rounded-[4rem] shadow-2xl border border-blue-50 relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-blue-50 rounded-full -mr-32 -mt-32 blur-3xl opacity-50" />
-                <div className="absolute bottom-0 left-0 w-64 h-64 bg-blue-100 rounded-full -ml-32 -mb-32 blur-3xl opacity-30" />
-                
-                <div className="relative z-10 flex flex-col items-center text-center">
-                  <div className="relative mb-12">
-                    <motion.div
-                      animate={{ 
-                        y: [0, -15, 0],
-                        rotate: [0, -2, 2, 0]
-                      }}
-                      transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
-                      className="w-64 h-64 bg-gradient-to-b from-blue-50 to-white rounded-full flex items-center justify-center text-[10rem] shadow-2xl shadow-blue-100 border-8 border-white"
-                    >
-                      {myProfile.petData.stage === "egg" ? "🥚" : myProfile.petData.stage === "baby" ? "🐣" : "🐥"}
-                    </motion.div>
-                    <motion.div 
-                      initial={{ scale: 0 }} animate={{ scale: 1 }}
-                      className="absolute -bottom-6 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-8 py-3 rounded-full font-black text-xl shadow-xl shadow-blue-200 border-4 border-white"
-                    >
-                      Lv. {myProfile.petData.level}
-                    </motion.div>
+              {role === "teacher" ? (
+                <div className="space-y-8">
+                  <div className="bg-white p-10 rounded-[3rem] shadow-xl border border-blue-50">
+                    <h2 className="text-3xl font-black text-blue-900 mb-2">우리 반 펫 농장 🐾</h2>
+                    <p className="text-blue-400 font-medium">학생들이 키우고 있는 모든 펫의 현황입니다.</p>
                   </div>
-                  
-                  <h3 className="text-4xl font-black mb-4 text-blue-900 tracking-tighter">
-                    {myProfile.petData.stage === "egg" ? "부화 대기 중인 알" : myProfile.petData.stage === "baby" ? "아기 펫" : "성장한 펫"}
-                  </h3>
-                  <div className="flex items-center gap-2 mb-12">
-                    <div className="h-2 w-48 bg-blue-50 rounded-full overflow-hidden">
-                      <motion.div 
-                        initial={{ width: 0 }} 
-                        animate={{ width: `${(myProfile.petData.exp / (myProfile.petData.level * 100)) * 100}%` }} 
-                        className="h-full bg-blue-500" 
-                      />
-                    </div>
-                    <span className="text-[10px] font-black text-blue-300 uppercase tracking-widest">EXP</span>
-                  </div>
-                  
-                  <div className="w-full max-w-2xl grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
-                    <div className="bg-blue-50/50 p-8 rounded-[2.5rem] border border-blue-100">
-                      <div className="flex justify-between items-center mb-4">
-                        <div className="flex items-center gap-2">
-                          <Milk size={18} className="text-orange-500" />
-                          <span className="text-sm font-black text-blue-900 uppercase tracking-widest">Hunger</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {students.map((s, i) => (
+                      <div key={i} className="bg-white p-6 rounded-[2.5rem] shadow-lg border border-blue-50 flex items-center gap-4">
+                        <div className="text-4xl bg-blue-50 w-16 h-16 rounded-2xl flex items-center justify-center">
+                          {s.petData.stage === "egg" ? "🥚" : s.petData.stage === "baby" ? "🐣" : "🐥"}
                         </div>
-                        <span className="text-lg font-black text-blue-600">{myProfile.petData.hunger}%</span>
-                      </div>
-                      <div className="h-4 bg-white rounded-full overflow-hidden border-2 border-blue-100">
-                        <motion.div 
-                          initial={{ width: 0 }} 
-                          animate={{ width: `${myProfile.petData.hunger}%` }} 
-                          className="h-full bg-gradient-to-r from-orange-400 to-orange-500" 
-                        />
-                      </div>
-                    </div>
-                    
-                    <div className="bg-blue-50/50 p-8 rounded-[2.5rem] border border-blue-100">
-                      <div className="flex justify-between items-center mb-4">
-                        <div className="flex items-center gap-2">
-                          <Droplets size={18} className="text-blue-500" />
-                          <span className="text-sm font-black text-blue-900 uppercase tracking-widest">Thirst</span>
+                        <div>
+                          <p className="font-black text-blue-900">{s.name}의 펫</p>
+                          <p className="text-xs font-bold text-blue-500">Lv.{s.petData.level} ({s.petData.stage})</p>
                         </div>
-                        <span className="text-lg font-black text-blue-600">{myProfile.petData.thirst}%</span>
                       </div>
-                      <div className="h-4 bg-white rounded-full overflow-hidden border-2 border-blue-100">
-                        <motion.div 
-                          initial={{ width: 0 }} 
-                          animate={{ width: `${myProfile.petData.thirst}%` }} 
-                          className="h-full bg-gradient-to-r from-blue-400 to-blue-500" 
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="flex flex-wrap justify-center gap-6 w-full max-w-2xl">
-                    <button 
-                      onClick={() => handlePetAction("feed")} 
-                      className="flex-1 min-w-[160px] bg-white border-4 border-blue-50 p-8 rounded-[2.5rem] flex flex-col items-center gap-4 hover:border-blue-200 hover:bg-blue-50 transition-all active:scale-95 group shadow-xl shadow-blue-50"
-                    >
-                      <div className="w-16 h-16 bg-orange-50 rounded-2xl flex items-center justify-center text-orange-500 group-hover:scale-110 transition-transform">
-                        <Milk size={32} />
-                      </div>
-                      <span className="font-black text-blue-900 text-lg">먹이주기</span>
-                      <span className="text-[10px] font-bold text-blue-300">+5 EXP / +1 {currencyName}</span>
-                    </button>
-                    
-                    <button 
-                      onClick={() => handlePetAction("water")} 
-                      className="flex-1 min-w-[160px] bg-white border-4 border-blue-50 p-8 rounded-[2.5rem] flex flex-col items-center gap-4 hover:border-blue-200 hover:bg-blue-50 transition-all active:scale-95 group shadow-xl shadow-blue-50"
-                    >
-                      <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-500 group-hover:scale-110 transition-transform">
-                        <Droplets size={32} />
-                      </div>
-                      <span className="font-black text-blue-900 text-lg">물주기</span>
-                      <span className="text-[10px] font-bold text-blue-300">+5 EXP / +1 {currencyName}</span>
-                    </button>
-                    
-                    <button 
-                      onClick={generateMathProblem} 
-                      disabled={isSolving}
-                      className="flex-1 min-w-[160px] bg-blue-600 p-8 rounded-[2.5rem] flex flex-col items-center gap-4 hover:bg-blue-700 transition-all active:scale-95 group shadow-2xl shadow-blue-200 disabled:opacity-50"
-                    >
-                      <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center text-white group-hover:scale-110 transition-transform">
-                        {isSolving ? <RefreshCw size={32} className="animate-spin" /> : <Brain size={32} />}
-                      </div>
-                      <span className="font-black text-white text-lg">수학 퀴즈</span>
-                      <span className="text-[10px] font-bold text-blue-100">+20 EXP / +5 {currencyName}</span>
-                    </button>
+                    ))}
                   </div>
                 </div>
-              </div>
+              ) : !myProfile ? (
+                <div className="bg-white p-20 rounded-[4rem] shadow-2xl border-4 border-dashed border-blue-100 text-center">
+                  <div className="w-24 h-24 bg-blue-50 rounded-full flex items-center justify-center text-blue-500 mx-auto mb-8">
+                    <LogIn size={48} />
+                  </div>
+                  <h3 className="text-3xl font-black text-blue-900 mb-4">로그인이 필요합니다</h3>
+                  <p className="text-blue-400 font-bold mb-10">펫을 키우려면 학생 계정으로 로그인해 주세요.</p>
+                  <button 
+                    onClick={() => setShowLoginModal(true)}
+                    className="bg-blue-500 text-white px-10 py-5 rounded-3xl font-black text-xl shadow-2xl shadow-blue-200 hover:bg-blue-600 transition-all active:scale-95"
+                  >
+                    학생 로그인하기
+                  </button>
+                </div>
+              ) : (
+                <div className="bg-white p-12 rounded-[4rem] shadow-2xl border border-blue-50 relative overflow-hidden">
+                  {/* ... existing pet UI ... */}
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-blue-50 rounded-full -mr-32 -mt-32 blur-3xl opacity-50" />
+                  <div className="absolute bottom-0 left-0 w-64 h-64 bg-blue-100 rounded-full -ml-32 -mb-32 blur-3xl opacity-30" />
+                  
+                  <div className="relative z-10 flex flex-col items-center text-center">
+                    <div className="relative mb-12">
+                      <motion.div
+                        animate={{ 
+                          y: [0, -15, 0],
+                          rotate: [0, -2, 2, 0]
+                        }}
+                        transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
+                        className="w-64 h-64 bg-gradient-to-b from-blue-50 to-white rounded-full flex items-center justify-center text-[10rem] shadow-2xl shadow-blue-100 border-8 border-white"
+                      >
+                        {myProfile.petData.stage === "egg" ? "🥚" : myProfile.petData.stage === "baby" ? "🐣" : "🐥"}
+                      </motion.div>
+                      <motion.div 
+                        initial={{ scale: 0 }} animate={{ scale: 1 }}
+                        className="absolute -bottom-6 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-8 py-3 rounded-full font-black text-xl shadow-xl shadow-blue-200 border-4 border-white"
+                      >
+                        Lv. {myProfile.petData.level}
+                      </motion.div>
+                    </div>
+                    
+                    <h3 className="text-4xl font-black mb-4 text-blue-900 tracking-tighter">
+                      {myProfile.petData.stage === "egg" ? "부화 대기 중인 알" : myProfile.petData.stage === "baby" ? "아기 펫" : "성장한 펫"}
+                    </h3>
+                    <div className="flex items-center gap-2 mb-12">
+                      <div className="h-2 w-48 bg-blue-50 rounded-full overflow-hidden">
+                        <motion.div 
+                          initial={{ width: 0 }} 
+                          animate={{ width: `${(myProfile.petData.exp / (myProfile.petData.level * 100)) * 100}%` }} 
+                          className="h-full bg-blue-500" 
+                        />
+                      </div>
+                      <span className="text-[10px] font-black text-blue-300 uppercase tracking-widest">EXP</span>
+                    </div>
+                    
+                    <div className="w-full max-w-2xl grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
+                      <div className="bg-blue-50/50 p-8 rounded-[2.5rem] border border-blue-100">
+                        <div className="flex justify-between items-center mb-4">
+                          <div className="flex items-center gap-2">
+                            <Milk size={18} className="text-orange-500" />
+                            <span className="text-sm font-black text-blue-900 uppercase tracking-widest">Hunger</span>
+                          </div>
+                          <span className="text-lg font-black text-blue-600">{myProfile.petData.hunger}%</span>
+                        </div>
+                        <div className="h-4 bg-white rounded-full overflow-hidden border-2 border-blue-100">
+                          <motion.div 
+                            initial={{ width: 0 }} 
+                            animate={{ width: `${myProfile.petData.hunger}%` }} 
+                            className="h-full bg-gradient-to-r from-orange-400 to-orange-500" 
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="bg-blue-50/50 p-8 rounded-[2.5rem] border border-blue-100">
+                        <div className="flex justify-between items-center mb-4">
+                          <div className="flex items-center gap-2">
+                            <Droplets size={18} className="text-blue-500" />
+                            <span className="text-sm font-black text-blue-900 uppercase tracking-widest">Thirst</span>
+                          </div>
+                          <span className="text-lg font-black text-blue-600">{myProfile.petData.thirst}%</span>
+                        </div>
+                        <div className="h-4 bg-white rounded-full overflow-hidden border-2 border-blue-100">
+                          <motion.div 
+                            initial={{ width: 0 }} 
+                            animate={{ width: `${myProfile.petData.thirst}%` }} 
+                            className="h-full bg-gradient-to-r from-blue-400 to-blue-500" 
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex flex-wrap justify-center gap-6 w-full max-w-2xl">
+                      <button 
+                        onClick={() => handlePetAction("feed")} 
+                        className="flex-1 min-w-[160px] bg-white border-4 border-blue-50 p-8 rounded-[2.5rem] flex flex-col items-center gap-4 hover:border-blue-200 hover:bg-blue-50 transition-all active:scale-95 group shadow-xl shadow-blue-50"
+                      >
+                        <div className="w-16 h-16 bg-orange-50 rounded-2xl flex items-center justify-center text-orange-500 group-hover:scale-110 transition-transform">
+                          <Milk size={32} />
+                        </div>
+                        <span className="font-black text-blue-900 text-lg">먹이주기</span>
+                        <span className="text-[10px] font-bold text-blue-300">+5 EXP / +1 {currencyName}</span>
+                      </button>
+                      
+                      <button 
+                        onClick={() => handlePetAction("water")} 
+                        className="flex-1 min-w-[160px] bg-white border-4 border-blue-50 p-8 rounded-[2.5rem] flex flex-col items-center gap-4 hover:border-blue-200 hover:bg-blue-50 transition-all active:scale-95 group shadow-xl shadow-blue-50"
+                      >
+                        <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-500 group-hover:scale-110 transition-transform">
+                          <Droplets size={32} />
+                        </div>
+                        <span className="font-black text-blue-900 text-lg">물주기</span>
+                        <span className="text-[10px] font-bold text-blue-300">+5 EXP / +1 {currencyName}</span>
+                      </button>
+                      
+                      <button 
+                        onClick={generateMathProblem} 
+                        disabled={isSolving}
+                        className="flex-1 min-w-[160px] bg-blue-600 p-8 rounded-[2.5rem] flex flex-col items-center gap-4 hover:bg-blue-700 transition-all active:scale-95 group shadow-2xl shadow-blue-200 disabled:opacity-50"
+                      >
+                        <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center text-white group-hover:scale-110 transition-transform">
+                          {isSolving ? <RefreshCw size={32} className="animate-spin" /> : <Brain size={32} />}
+                        </div>
+                        <span className="font-black text-white text-lg">수학 퀴즈</span>
+                        <span className="text-[10px] font-bold text-blue-100">+20 EXP / +5 {currencyName}</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </motion.div>
           )}
 

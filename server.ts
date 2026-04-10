@@ -107,7 +107,13 @@ async function startServer() {
           certificates: row[3] ? row[3].split(",") : [],
           allowance: parseInt(row[4] || "0"),
           password: row[5] || "1234",
-          petData: row[6] ? JSON.parse(row[6]) : { stage: "egg", level: 1, exp: 0, hunger: 50, thirst: 50, lastInteraction: Date.now() }
+          petData: (() => {
+            try {
+              return row[6] ? JSON.parse(row[6]) : { stage: "egg", level: 1, exp: 0, hunger: 50, thirst: 50, lastInteraction: Date.now() };
+            } catch (e) {
+              return { stage: "egg", level: 1, exp: 0, hunger: 50, thirst: 50, lastInteraction: Date.now() };
+            }
+          })()
         }));
         return res.json(studentList);
       }
