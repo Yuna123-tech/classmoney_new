@@ -25,8 +25,6 @@ import { motion, AnimatePresence } from "motion/react";
 import socket from "./lib/socket";
 import { GoogleGenAI, Type } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
 type Role = "student" | "teacher";
 type Tab = "dashboard" | "stocks" | "auction" | "admin" | "my-page" | "pet";
 
@@ -152,6 +150,13 @@ export default function App() {
   const [loginPassword, setLoginPassword] = useState("");
 
   const [serverConnected, setServerConnected] = useState(false);
+  const [teacherApiKey, setTeacherApiKey] = useState(localStorage.getItem("teacher_gemini_api_key") || "");
+
+  const getAiInstance = () => {
+    const key = teacherApiKey || process.env.GEMINI_API_KEY;
+    if (!key) return null;
+    return new GoogleGenAI({ apiKey: key });
+  };
 
   useEffect(() => {
     socket.on("connect", () => setServerConnected(true));
@@ -297,6 +302,13 @@ export default function App() {
   };
 
   const generateMathProblem = async () => {
+    const ai = getAiInstance();
+    if (!ai) {
+      alert("Gemini API 키가 설정되지 않았습니다. 관리 도구에서 API 키를 입력해 주세요.");
+      setActiveTab("admin");
+      return;
+    }
+
     setIsSolving(true);
     try {
       const response = await ai.models.generateContent({
@@ -321,7 +333,7 @@ export default function App() {
       setShowMathModal(true);
     } catch (err) {
       console.error(err);
-      alert("문제를 생성하는 중 오류가 발생했습니다. API 키 설정을 확인해 주세요.");
+      alert("문제를 생성하는 중 오류가 발생했습니다. API 키가 올바른지 확인해 주세요.");
     } finally {
       setIsSolving(false);
     }
@@ -1032,6 +1044,39 @@ export default function App() {
                     >
                       전체 학생에게 지급
                     </button>
+                  </div>
+                </div>
+
+                <div className="bg-white p-10 rounded-[3rem] shadow-xl border border-blue-50">
+                  <h3 className="text-2xl font-black mb-8 flex items-center gap-3 text-blue-900">
+                    <Settings className="text-gray-500" />
+                    시스템 설정 (보안)
+                  </h3>
+                  <div className="space-y-6">
+                    <div>
+                      <label className="block text-[10px] font-black text-blue-300 uppercase tracking-widest mb-2">Gemini API Key</label>
+                      <div className="flex gap-2">
+                        <input 
+                          type="password" 
+                          value={teacherApiKey}
+                          onChange={(e) => setTeacherApiKey(e.target.value)}
+                          placeholder="AI 기능을 위한 API 키를 입력하세요" 
+                          className="flex-1 px-6 py-4 rounded-2xl bg-blue-50 border-2 border-transparent focus:border-blue-400 focus:bg-white transition-all outline-none font-bold text-blue-900" 
+                        />
+                        <button 
+                          onClick={() => {
+                            localStorage.setItem("teacher_gemini_api_key", teacherApiKey);
+                            alert("API 키가 브라우저에 안전하게 저장되었습니다.");
+                          }}
+                          className="bg-blue-600 text-white px-6 py-4 rounded-2xl font-black hover:bg-blue-700 transition-all"
+                        >
+                          저장
+                        </button>
+                      </div>
+                      <p className="mt-2 text-[10px] text-blue-300 font-medium">
+                        * 이 키는 서버에 저장되지 않고 선생님의 브라우저에만 보관됩니다. (보안 철저)
+                      </p>
+                    </div>
                   </div>
                 </div>
 
